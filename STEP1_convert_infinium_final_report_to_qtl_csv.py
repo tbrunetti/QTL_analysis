@@ -1,9 +1,14 @@
 import pandas
 import argparse
+import os
 
-def read_data_df():
-     snp_map = pandas.read_csv(filepath_or_buffer="SNP_Map.txt", sep = "\t")
-     updated_gigamuga_annots = pandas.read_csv("gm_uwisc_v4.csv")
+def subset_illumina_final_report():
+     pass
+
+def illumina_final_report_to_QTL_csv(final_report:str, cm_col_name:str, snp_map:str, file_prefix:str) -> None:
+     '''
+     snp_map = pandas.read_csv(filepath_or_buffer="/mnt/Gapin-Lab/For Tonya/B6_B:c_N2s_QTL_analysis/neogen_files/Univ_of_Colorado_Gapin_MURGIGV01_20180920/SNP_Map.txt", sep = "\t")
+     updated_gigamuga_annots = pandas.read_csv("/home/tonya/bc_b6_backcross_gigamuga_array_03252024/gm_uwisc_v4.csv")
      snp_map.rename(columns={'Name': 'SNP Name'},inplace=True)
      updated_gigamuga_annots.rename(columns={'marker': 'SNP Name'}, inplace = True)
 
@@ -18,17 +23,28 @@ def read_data_df():
      autosomal_snp_map['cM_cox'] = autosomal_snp_map['cM_cox'].astype(float)
 
      autosomal_snp_map.sort_values(['chr', 'bp_mm10', 'cM_cox'],ascending=[True, True, True],inplace=True)
+     '''
+     preheader_lines =  0
+     with open(final_report, 'r') as ilmn_file:
+          for line in enumerate(ilmn_file):
+               if line[1].strip() == "[Data]": # header starts after the line [Data] in the Illumina final report
+                    preheader_lines = line[0]+1 # enumerate is 0-indexed but skip in pandas is 1-indexed
+                    break
+
      
-     inf_df = pandas.read_csv(filepath_or_buffer="FinalReport.txt", sep = "\t", skiprows=9)
+     inf_df = pandas.read_csv(filepath_or_buffer = final_report, sep = "\t", skiprows=preheader_lines)
      inf_df['genotype'] = inf_df['Allele1 - AB'] + inf_df['Allele2 - AB']
      
      inf_df_with_map = inf_df.merge(snp_map, on='SNP Name', how = "left")
 
-
-     new_inf_df = inf_df_with_map.pivot(index = 'Sample ID',  columns= ['SNP Name','chr','cM_cox'], values= 'genotype')
-     del inf_df_with_map
-     new_inf_df = new_inf_df[autosomal_snp_map['SNP Name']]
-     new_inf_df.to_csv("FinalReport_to_qtl_format.csv", sep=",", header = True, index= True)
+     if cm_col_name != None:
+          new_inf_df = inf_df_with_map.pivot(index = 'Sample ID',  columns= ['SNP Name','chr', cm_col_name], values= 'genotype')
+          del inf_df_with_map
+     else:
+          new_inf_df = inf_df_with_map.pivot(index = 'Sample ID',  columns= ['SNP Name','chr'], values= 'genotype')
+          del inf_df_with_map
+     
+     new_inf_df.to_csv(file_prefix + '_finalReport_to_qtl_format.csv', sep=",", header = True, index= True)
 
 
 '''
@@ -97,10 +113,13 @@ A text file with no header line, and one line per variant with the following 3-4
 
 
 def illumina_final_report_to_plink(final_report: str, snp_map: str, file_prefix: str, bp_col_name: str, cm_col_name: str) -> None:
-     
-     final_report = "test_final_report.txt"
-     snp_map = "test_snp_map.txt"
+     '''
+     TEST
+     final_report = "/home/tonya/bc_b6_backcross_gigamuga_array_03252024/test_final_report.txt"
+     snp_map = "/home/tonya/bc_b6_backcross_gigamuga_array_03252024/test_snp_map.txt"
      file_prefix= "test_prefix"
+     '''
+
 
      def make_fam(final_report: pandas.DataFrame) -> None:
           samples = list(set(final_report["Sample ID"]))
@@ -116,8 +135,11 @@ def illumina_final_report_to_plink(final_report: str, snp_map: str, file_prefix:
                          fam_file.close()
 
      def make_map(snp_map: pandas.DataFrame, bp_col_name:str, cm_col_name:str) -> None:
+          '''
+          TEST: 
           bp_col_name = 'bp_mm10'
           cm_col_name = 'cM_cox'
+          '''
 
           if cm_col_name == None:
                snp_map['cM']  = 0
@@ -143,29 +165,32 @@ def illumina_final_report_to_plink(final_report: str, snp_map: str, file_prefix:
      final_report = pandas.read_csv(final_report, sep = "\t", skiprows=preheader_lines)
      snp_map = pandas.read_csv(snp_map, sep = "\t")
      make_fam(final_report = final_report)
-     make_map(snp_map = snp_map, bp_col_name="bp_mm10", cm_col_name="cM_cox")
-     make_lgen(final_report = final_report, file_prefix='test_prefix')
+     make_map(snp_map = snp_map, bp_col_name = bp_col_name, cm_col_name = cm_col_name)
+     make_lgen(final_report = final_report, file_prefix = file_prefix)
 
-#def update_annotations_in_final_report( final_report, snp_map, updated_annots, autosomes_only, output_new_snp_map, output_new_final_report):
-def update_annotations_in_final_report():
+#def update_annotations_in_final_report(final_report:str, snp_map:str, updated_annots:str, autosomes_only:bool, output_new_snp_map:str, output_new_final_report:str) -> None:
+def update_annotations_in_final_report(final_report:str, snp_map:str, updated_annots:str, autosomes_only:bool, file_prefix:str, outdir:str) -> None:
 
-     final_report = "FinalReport.txt"
-     snp_map = "SNP_Map_MURGIGV01_array_20180920.txt"
-     updated_annots = "gm_uwisc_v4.csv"
+     '''
+     TEST:
+     final_report = "/home/tonya/bc_b6_backcross_gigamuga_array_03252024/Univ_of_Colorado_Gapin_MURGIGV01_20180920_FinalReport.txt"
+     snp_map = "/home/tonya/bc_b6_backcross_gigamuga_array_03252024/SNP_Map_MURGIGV01_array_20180920.txt"
+     updated_annots = "/home/tonya/bc_b6_backcross_gigamuga_array_03252024/gm_uwisc_v4.csv"
      autosomes_only = True
-     output_new_snp_map = "test_snp_map.txt"
-     output_new_final_report = "test_final_report.txt"
+     output_new_snp_map = "/home/tonya/bc_b6_backcross_gigamuga_array_03252024/test_snp_map.txt"
+     output_new_final_report = "/home/tonya/bc_b6_backcross_gigamuga_array_03252024/test_final_report.txt"
+     '''
+
 
      preheader_lines =  0
      with open(final_report, 'r') as ilmn_file:
-          with open(output_new_final_report, 'w') as output_file: # since making new final report output preheader to that file
+          with open(os.path.join(outdir, file_prefix + '_SNP_map.txt', 'w')) as output_file: # since making new final report output preheader to that file
                for line in enumerate(ilmn_file):
                     output_file.write(line[1].strip() + '\n')
                     output_file.flush() # flush out buffer to maintain write orders
                     if line[1].strip() == "[Data]": # header starts after the line [Data] in the Illumina final report
                          preheader_lines = line[0]+1 # enumerate is 0-indexed but skip in pandas is 1-indexed
                          break
-     
 
      
      final_report = pandas.read_csv(filepath_or_buffer = final_report, sep = "\t", skiprows=preheader_lines)
@@ -192,11 +217,75 @@ def update_annotations_in_final_report():
 
 
           updated_final_report = final_report.merge(autosomal_snp_map, on='SNP Name', how = "right")
-          updated_final_report[list(final_report)].to_csv(output_new_final_report, sep="\t", header = True, index= False, mode = 'a') # mode = a will append to existing file
-          autosomal_snp_map.to_csv(output_new_snp_map, sep = "\t", header = True, index = False)
+          updated_final_report[list(final_report)].to_csv(os.path.join(file_prefix + '_finalReport.txt'), sep="\t", header = True, index= False, mode = 'a') # mode = a will append to existing file
+          autosomal_snp_map.to_csv(os.path.join(outdir, file_prefix + '_SNP_map.txt'), sep = "\t", header = True, index = False)
 
 if __name__ == '__main__':
+     import sys
      parser = argparse.ArgumentParser(help = 'function to help data wrangle genotyping data into commonly used genetic formats')
-     parser.add_argument('')
+     parser.add_argument('--method', choices=['update_annots', 'reportToPlink', 'reportToQTLcsv', 'subsetReport'], help='Select one of the choice of what method/calculation you want to run')
+     parser.add_argument('--finalReport', type='str', help = 'Full path to the Illumina final report generated by GenomeStudio')
+     parser.add_argument('--snpMap', type = str, help = "Full path to the array snp map generated by GenomeStudio")
+     parser.add_argument('--updateSnpMap', type = str, help = "Full path to the updated snp map annotations.  For formatting, please refer to gm_uwisc_v4.csv")
+     parser.add_argument('--autosome', action='store_true', type = bool, help = "If this flag is set, subset data to only autosomal chromosomes")
+     parser.add_argument('--bpPosName', type = str, help = "The exact name of the column in your SNP Map that contain the physical base pair positions you want to use")
+     parser.add_argument('--cMname', type = str, default=None, help = "The exact name of the column that contains the genetic cM distance for each marker.  This is optional.")
+     parser.add_argument('--fileNamePrefix', type = str, help = 'A string of a file name prefix you want to use to name files.  Note, no file extensions needed and no spaces, special characters')
+     parser.add_argument('--outDir', type = str, default=os.getcwd(), help = "Path or name of output directory; if it does not exist, one will be made" )
+     args = parser.parse_args()
+
+     #TODO: check if directory exist, if not make it
+     if os.path.isdir(args.outDir) == False:
+          os.makedirs(args.outDir)
+
      
-     update_annotations_in_final_report()
+     if args.method == 'update_annots':
+          #TODO: check if file with extenion for each function exists and if it does throw error; do not overwrite
+          try:
+               assert os.path.exists(os.path.join(args.outDir, args.fileNamePrefix + '_SNP_map.txt')) == False
+          except AssertionError:
+               print('The file {} already exists.  Please select a new file prefix that does not exist in the output directory specified.'.format(os.path.join(args.outDir, args.fileNamePrefix + '_SNP_map.txt')))
+               sys.exit()
+          try:
+               assert os.path.exists(os.path.join(args.outDir, args.fileNamePrefix + '_finalReport.txt')) == False
+          except AssertionError:
+               print('The file {} already exists.  Please select a new file prefix that does not exist in the output directory specified.'.format(os.path.join(args.outDir, args.fileNamePrefix + '_finalReport.txt')))
+               sys.exit()
+
+          update_annotations_in_final_report(final_report = args.finalReport, snp_map = args.snpMap, updated_annots = args.updateSnpMap, \
+                                        autosomes_only = args.autosome, file_prefix = args.fileNamePrefix, outdir=args.outDir)
+     
+     
+     elif args.method == 'reportToPlink':
+          try:
+               assert os.path.exists(os.path.join(args.outDir, args.fileNamePrefix + '.map')) == False
+          except AssertionError:
+               print('The file {} already exists.  Please select a new file prefix that does not exist in the output directory specified.'.format(os.path.join(args.outDir, args.fileNamePrefix + '.map')))
+               sys.exit()
+          try:
+               assert os.path.exists(os.path.join(args.outDir, args.fileNamePrefix + '.fam')) == False
+          except AssertionError:
+               print('The file {} already exists.  Please select a new file prefix that does not exist in the output directory specified.'.format(os.path.join(args.outDir, args.fileNamePrefix + '.fam')))
+               sys.exit()
+
+          try:
+               assert os.path.exists(os.path.join(args.outDir, args.fileNamePrefix + '.lgen')) == False
+          except AssertionError:
+               print('The file {} already exists.  Please select a new file prefix that does not exist in the output directory specified.'.format(os.path.join(args.outDir, args.fileNamePrefix + '.lgen')))
+               sys.exit()
+
+          illumina_final_report_to_plink(final_report = args.finalReport, snp_map = args.snpMap, file_prefix = args.fileNamePrefix, \
+                                         bp_col_name = args.bpPosName, cm_col_name = args.cMname )
+     elif args.methods == 'reportToQTLcsv':
+          
+          try:
+               assert os.path.exists(os.path.join(args.outDir, args.fileNamePrefix + '_finalReport_to_qtl_format.csv')) == False
+          except AssertionError:
+               print('The file {} already exists.  Please select a new file prefix that does not exist in the output directory specified.'.format(os.path.join(args.outDir, args.fileNamePrefix + '_finalReport_to_qtl_format.csv')))
+               sys.exit()
+
+          illumina_final_report_to_QTL_csv(final_report = args.finalReport, cm_col_name = args.cMname, snp_map = args.snpMap, file_prefix = args.fileNamePrefix)
+
+     elif args.methods == 'subsetReport':
+          subset_illumina_final_report(final_report = args.finalReport)
+
