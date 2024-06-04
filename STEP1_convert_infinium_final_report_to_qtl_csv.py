@@ -2,9 +2,66 @@ import pandas
 import argparse
 import os
 
-def subset_illumina_final_report():
-     pass
+def subset_illumina_final_report(final_report:str, snp_keep:str, snp_remove:str, sample_keep:str, sample_remove:str, outdir:str, file_prefix:str) -> None:
 
+     # define snp and sample filtering fuctions
+     def snp_filtering(inf_df) -> pandas.DataFrame:
+          if snp_keep != None:
+               keep_snp_list = []
+               with open(snp_keep, 'r') as snps_to_keep:
+                    for line in snps_to_keep:
+                         keep_snp_list.append(line.strip())
+               updated_snp_df = inf_df[inf_df['SNP Name'].isin(keep_snp_list)]
+               return(updated_snp_df)
+          elif snp_remove != None:
+               remove_snp_list = []
+               with open(snp_remove, 'r') as snps_to_remove:
+                    for line in snp_remove:
+                         remove_snp_list.append(line.strip())
+               
+               updated_snp_df = inf_df[~inf_df['SNP Name'].isin(remove_snp_list)]
+               return(updated_snp_df)
+     
+     def sample_filtering(inf_df) -> pandas.DataFrame:
+          if sample_keep != None:
+               keep_sample_list = []
+               with open(sample_keep, 'r') as samples_to_keep:
+                    for line in samples_to_keep:
+                         keep_sample_list.append(line.strip())
+               print(keep_sample_list)
+               updated_sample_df = inf_df[inf_df['Sample ID'].isin(keep_sample_list)]
+               return(updated_sample_df)
+          elif sample_remove != None:
+               remove_sample_list = []
+               with open(sample_remove, 'r') as samples_to_remove:
+                    for line in samples_to_remove:
+                         remove_sample_list.append(line.strip())
+
+               updated_sample_df = inf_df[~inf_df['Sample ID'].isin(remove_sample_list)]
+               return(updated_sample_df)
+     
+     # read in final report
+
+     preheader_lines =  0
+     with open(final_report, 'r') as ilmn_file:
+          with open(os.path.join(outdir, file_prefix + '_snp_sample_filtered_final_report.txt'), 'w') as output_file: # since making new final report output preheader to that file
+               for line in enumerate(ilmn_file):
+                    output_file.write(line[1].strip() + '\n')
+                    output_file.flush() # flush out buffer to maintain write orders
+                    if line[1].strip() == "[Data]": # header starts after the line [Data] in the Illumina final report
+                         preheader_lines = line[0]+1 # enumerate is 0-indexed but skip in pandas is 1-indexed
+                         break
+
+
+     inf_df = pandas.read_csv(filepath_or_buffer = final_report, sep = "\t", skiprows=preheader_lines, dtype=str)
+     updated_snp_df = snp_filtering(inf_df = inf_df)
+
+     updated_sample_df = sample_filtering(inf_df = updated_snp_df)
+
+     # write filtered data back to final report
+     updated_sample_df.to_csv(os.path.join(outdir, file_prefix + '_snp_sample_filtered_final_report.txt'), sep="\t", header = True, index= False, mode = 'a') # mode = a will append to existing file
+
+     
 def illumina_final_report_to_QTL_csv(final_report:str, cm_col_name:str, snp_map:str, file_prefix:str) -> None:
      '''
      snp_map = pandas.read_csv(filepath_or_buffer="/mnt/Gapin-Lab/For Tonya/B6_B:c_N2s_QTL_analysis/neogen_files/Univ_of_Colorado_Gapin_MURGIGV01_20180920/SNP_Map.txt", sep = "\t")
@@ -34,8 +91,8 @@ def illumina_final_report_to_QTL_csv(final_report:str, cm_col_name:str, snp_map:
      
      inf_df = pandas.read_csv(filepath_or_buffer = final_report, sep = "\t", skiprows=preheader_lines)
      inf_df['genotype'] = inf_df['Allele1 - AB'] + inf_df['Allele2 - AB']
-     
-     inf_df_with_map = inf_df.merge(snp_map, on='SNP Name', how = "left")
+     snp_map_df = pandas.read_csv(filepath_or_buffer= snp_map, sep = '\t')
+     inf_df_with_map = inf_df.merge(snp_map_df, on='SNP Name', how = "left")
 
      if cm_col_name != None:
           new_inf_df = inf_df_with_map.pivot(index = 'Sample ID',  columns= ['SNP Name','chr', cm_col_name], values= 'genotype')
@@ -184,7 +241,7 @@ def update_annotations_in_final_report(final_report:str, snp_map:str, updated_an
 
      preheader_lines =  0
      with open(final_report, 'r') as ilmn_file:
-          with open(os.path.join(outdir, file_prefix + '_SNP_map.txt', 'w')) as output_file: # since making new final report output preheader to that file
+          with open(os.path.join(outdir, file_prefix + '_anno_updated_finalReport.txt'), 'w') as output_file: # since making new final report output preheader to that file
                for line in enumerate(ilmn_file):
                     output_file.write(line[1].strip() + '\n')
                     output_file.flush() # flush out buffer to maintain write orders
@@ -217,21 +274,27 @@ def update_annotations_in_final_report(final_report:str, snp_map:str, updated_an
 
 
           updated_final_report = final_report.merge(autosomal_snp_map, on='SNP Name', how = "right")
-          updated_final_report[list(final_report)].to_csv(os.path.join(file_prefix + '_finalReport.txt'), sep="\t", header = True, index= False, mode = 'a') # mode = a will append to existing file
-          autosomal_snp_map.to_csv(os.path.join(outdir, file_prefix + '_SNP_map.txt'), sep = "\t", header = True, index = False)
+          updated_final_report[list(final_report)].to_csv(os.path.join(file_prefix + '_anno_updated_finalReport.txt'), sep="\t", header = True, index= False, mode = 'a') # mode = a will append to existing file
+          autosomal_snp_map.to_csv(os.path.join(outdir, file_prefix + '_anno_updated_SNP_map.txt'), sep = "\t", header = True, index = False)
 
 if __name__ == '__main__':
      import sys
-     parser = argparse.ArgumentParser(help = 'function to help data wrangle genotyping data into commonly used genetic formats')
+     parser = argparse.ArgumentParser(description = 'function to help data wrangle genotyping data into commonly used genetic formats')
      parser.add_argument('--method', choices=['update_annots', 'reportToPlink', 'reportToQTLcsv', 'subsetReport'], help='Select one of the choice of what method/calculation you want to run')
-     parser.add_argument('--finalReport', type='str', help = 'Full path to the Illumina final report generated by GenomeStudio')
+     parser.add_argument('--finalReport', type=str, help = 'Full path to the Illumina final report generated by GenomeStudio')
      parser.add_argument('--snpMap', type = str, help = "Full path to the array snp map generated by GenomeStudio")
      parser.add_argument('--updateSnpMap', type = str, help = "Full path to the updated snp map annotations.  For formatting, please refer to gm_uwisc_v4.csv")
-     parser.add_argument('--autosome', action='store_true', type = bool, help = "If this flag is set, subset data to only autosomal chromosomes")
+     parser.add_argument('--autosome', action='store_true', help = "If this flag is set, subset data to only autosomal chromosomes")
      parser.add_argument('--bpPosName', type = str, help = "The exact name of the column in your SNP Map that contain the physical base pair positions you want to use")
      parser.add_argument('--cMname', type = str, default=None, help = "The exact name of the column that contains the genetic cM distance for each marker.  This is optional.")
      parser.add_argument('--fileNamePrefix', type = str, help = 'A string of a file name prefix you want to use to name files.  Note, no file extensions needed and no spaces, special characters')
      parser.add_argument('--outDir', type = str, default=os.getcwd(), help = "Path or name of output directory; if it does not exist, one will be made" )
+     # options below specific to function def subset_illumina_final_report()
+     parser.add_argument('--snpKeep', type = str, default = None, help='A list of snp names to keep, 1 per line and snp name must be in the "SNP Name" column of the final report')
+     parser.add_argument('--snpRemove', type = str, default= None, help='A list of snp names to remove, 1 per line and snp name must be in the "SNP Name" column of the final report')
+     parser.add_argument('--sampleKeep', type = str, default = None, help='A list of sample names to keep, 1 per line and sample name must be in the "Sample ID" column of the final report.')
+     parser.add_argument('--sampleRemove', type = str, default = None, help='A list of sample names to keep, 1 per line and sample name must be in the "Sample ID" column of the final report.')
+     
      args = parser.parse_args()
 
      #TODO: check if directory exist, if not make it
@@ -240,7 +303,7 @@ if __name__ == '__main__':
 
      
      if args.method == 'update_annots':
-          #TODO: check if file with extenion for each function exists and if it does throw error; do not overwrite
+          # check if file with extenion for each function exists and if it does throw error; do not overwrite
           try:
                assert os.path.exists(os.path.join(args.outDir, args.fileNamePrefix + '_SNP_map.txt')) == False
           except AssertionError:
@@ -257,6 +320,8 @@ if __name__ == '__main__':
      
      
      elif args.method == 'reportToPlink':
+          # check if file with extenion for each function exists and if it does throw error; do not overwrite
+
           try:
                assert os.path.exists(os.path.join(args.outDir, args.fileNamePrefix + '.map')) == False
           except AssertionError:
@@ -267,7 +332,6 @@ if __name__ == '__main__':
           except AssertionError:
                print('The file {} already exists.  Please select a new file prefix that does not exist in the output directory specified.'.format(os.path.join(args.outDir, args.fileNamePrefix + '.fam')))
                sys.exit()
-
           try:
                assert os.path.exists(os.path.join(args.outDir, args.fileNamePrefix + '.lgen')) == False
           except AssertionError:
@@ -276,8 +340,8 @@ if __name__ == '__main__':
 
           illumina_final_report_to_plink(final_report = args.finalReport, snp_map = args.snpMap, file_prefix = args.fileNamePrefix, \
                                          bp_col_name = args.bpPosName, cm_col_name = args.cMname )
-     elif args.methods == 'reportToQTLcsv':
-          
+     elif args.method == 'reportToQTLcsv':
+          # check if file generated from function exists and if it does throw error; do not overwrite
           try:
                assert os.path.exists(os.path.join(args.outDir, args.fileNamePrefix + '_finalReport_to_qtl_format.csv')) == False
           except AssertionError:
@@ -286,6 +350,20 @@ if __name__ == '__main__':
 
           illumina_final_report_to_QTL_csv(final_report = args.finalReport, cm_col_name = args.cMname, snp_map = args.snpMap, file_prefix = args.fileNamePrefix)
 
-     elif args.methods == 'subsetReport':
-          subset_illumina_final_report(final_report = args.finalReport)
+     elif args.method == 'subsetReport':
+          '''
+          What should we be able to subset in a final report:
+          1. list of SNPs to keep
+          2. list of SNPs to remove
+          3. list of samples to keep
+          4. list of samples to remove
+          '''
+          # check if file generated from function exists and if it does throw error; do not overwrite
+          try:
+               assert os.path.exists(os.path.join(args.outDir, args.fileNamePrefix + '_snp_sample_filtered_final_report.txt')) == False
+          except AssertionError:
+               print('The file {} already exists.  Please select a new file prefix that does not exist in the output directory specified.'.format(os.path.join(args.outDir, args.fileNamePrefix + '_snp_sample_filtered_final_report.txt')))
+               sys.exit()
+          # TODO: keep and remove should be mutually exclusive for the same type
+          subset_illumina_final_report(final_report = args.finalReport, snp_keep = args.snpKeep, snp_remove = args.snpRemove, sample_keep = args.sampleKeep, sample_remove = args.sampleRemove, outdir = args.outDir, file_prefix = args.fileNamePrefix)
 
